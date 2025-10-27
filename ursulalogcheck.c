@@ -56,11 +56,14 @@
 
 #define DELIMITER                         ':'
 #define SO_DELIMITER                      '|'
+#define COORD_START_CHAR                  '('
 #define COORD_DELIMITER                   ','
+#define COORD_FINISH_CHAR                 ')'
 #define TIME_START_CHAR                   '['
 #define TIME_FINISH_CHAR                  ']'
 #define POSITION_LOG_DELIMITER            ';'
 #define ATTACK_LOG_DELIMITER              ' '
+
 
 #define SECRET_STRING                     "secret"
 #define ID_STRING                         "id"
@@ -254,10 +257,16 @@ static int parse_coordinates(char* s, Point* pos)
 		return URSULA_CHECK_BAD_PARAMETERS;
 	}
 	
-	while (*s && (*s == ' ' || *s == '\t')) {
+	while (*s && (*s == ' ' || *s == '\t' || *s == COORD_START_CHAR)) {
 		s++;
 	}
-
+	
+	d = s + strlen(s) - 1;
+	while (d > s && (*d == ' ' || *d == '\t' || *d == COORD_FINISH_CHAR)) {
+		*d = 0;
+		d--;
+	}
+	
 	d = strchr(s, COORD_DELIMITER);
 	if (!d) {
 		return URSULA_CHECK_FORMAT_ERROR;
@@ -418,12 +427,14 @@ static int cyberiada_ursula_log_task_config(const char* cfgfile, UrsulaCheckerTa
 		  task->conditions_count);*/
 
 	fseek(cfg, 0, SEEK_SET);
+	line = 0;
 	while(!feof(cfg)) {
 		size_t size = MAX_STR_LEN - 1;
 		ssize_t strsize = getline(&buffer, &size, cfg);
 		char* s = buffer;
 		char kind = 0;
-
+		line++;
+		
 		if (strsize > 0) {
 			if (s[strsize - 1] == '\n') {
 				s[strsize - 1] = 0;
@@ -445,11 +456,11 @@ static int cyberiada_ursula_log_task_config(const char* cfgfile, UrsulaCheckerTa
 			for (i = 0; i < 6; i++) {
 				char* d = strchr(s, DELIMITER);
 				if (!d) {
-					ERROR("Bad string on the line %lu in the config file %s!\n", line - 1, cfgfile);
+					ERROR("Bad string on the line %lu in the config file %s!\n", line, cfgfile);
 					goto error_csv;
 				}
 				*d = 0;
-				/* DEBUG("line %lu, i %lu, token %s\n", line, i, s); */
+				/* DEBUG("line %lu, i %lu, token %s\n", line, i, s);*/
 				if (i == 0) {
 					if (strcmp(s, BASE_OBJ_STRING) == 0) {
 						if (task->base_objects_count == 0) {
@@ -542,11 +553,15 @@ static int cyberiada_ursula_log_task_config(const char* cfgfile, UrsulaCheckerTa
 						}
 						task->object_reqs[object_reqs_cnt].minimum = (unsigned char)n;
 					} else if (kind == 'b') {
-						if (parse_coordinates(s, &(task->base_objects[base_objects_cnt].pos)) != URSULA_CHECK_NO_ERROR) {
-							ERROR("Bad coordinates '%s' in the config file %s!\n", s, cfgfile);
-							goto error_csv;	
+						if (*s) {
+							if (parse_coordinates(s, &(task->base_objects[base_objects_cnt].pos)) != URSULA_CHECK_NO_ERROR) {
+								ERROR("Bad coordinates '%s' in the config file %s!\n", s, cfgfile);
+								goto error_csv;	
+							}
+							task->base_objects[base_objects_cnt].pos_predefined = 1;
+						} else {
+							task->base_objects[base_objects_cnt].pos_predefined = 0;
 						}
-						task->base_objects[base_objects_cnt].pos_predefined = 1;
 					}
 				} else if (i == 4) {
 					if (kind == 'c' && *s) {
@@ -593,7 +608,7 @@ static int cyberiada_ursula_log_task_config(const char* cfgfile, UrsulaCheckerTa
 				}
 				s = d + 1;
 			}
-			/* DEBUG("line %lu, i %lu, token %s\n", line, i, s); */
+			/*DEBUG("line %lu, i %lu, token %s\n", line, i, s);*/
 			if (kind == 'c') {
 				float n;
 				n = atof(s);
@@ -945,10 +960,20 @@ static int cyberiada_test_condition(unsigned int time,
 				if (primary->type == cond->primary_obj_type &&
 					(primary->type == otPlayer ||
 					 (primary->type != otPlayer && strcmp(primary->class, cond->primary_obj_class) == 0)) &&
+					secondary->type == cond->secondary_obj_type &&
 					(secondary->type == otPlayer ||
-					 (secondary->type != otPlayer && strcmp(secondary->class, cond->secondary_obj_class) == 0)) &&
-					DIST(primary->pos, secondary->pos) <= cond->argument) {
-					found = 1;
+					 (secondary->type != otPlayer && strcmp(secondary->class, cond->secondary_obj_class) == 0))) {
+					float dist = DIST(primary->pos, secondary->pos);
+					/* DEBUG("Check condition proximity:\n"); */
+					/* cyberiada_ursula_log_print_condition(cond, "\t"); */
+					/* DEBUG("\tprimary: (%.2f, %.2f)\n", */
+					/* 	  primary->pos.x, primary->pos.y); */
+					/* DEBUG("\tsecondary: (%.2f, %.2f)\n", */
+					/* 	  secondary->pos.x, secondary->pos.y); */
+					/* DEBUG("\tdist: %.2f arg: %.2f\n", dist, cond->argument); */
+					if (dist <= cond->argument) {
+						found = 1;
+					}
 				}
 			}
 		}
@@ -973,10 +998,21 @@ static int cyberiada_test_condition(unsigned int time,
 				if (primary->type == cond->primary_obj_type &&
 					(primary->type == otPlayer ||
 					 (primary->type != otPlayer && strcmp(primary->class, cond->primary_obj_class) == 0)) &&
+					secondary->type == cond->secondary_obj_type &&
 					(secondary->type == otPlayer ||
-					 (secondary->type != otPlayer && strcmp(secondary->class, cond->secondary_obj_class) == 0)) &&
-					DIST(primary->pos, secondary->pos) < DIST(primary->prev_pos, secondary->prev_pos)) {
-					found = 1;
+					 (secondary->type != otPlayer && strcmp(secondary->class, cond->secondary_obj_class) == 0))) {
+					float dist = DIST(primary->pos, secondary->pos);
+					float prev_dist = DIST(primary->prev_pos, secondary->prev_pos);
+					/* DEBUG("Check condition approaching:\n"); */
+					/* cyberiada_ursula_log_print_condition(cond, "\t"); */
+					/* DEBUG("\tprimary: (%.2f, %.2f) prev (%.2f, %.2f)\n", */
+					/* 	  primary->pos.x, primary->pos.y, primary->prev_pos.x, primary->prev_pos.y); */
+					/* DEBUG("\tsecondary: (%.2f, %.2f) prev (%.2f, %.2f)\n", */
+					/* 	  secondary->pos.x, secondary->pos.y, secondary->prev_pos.x, secondary->prev_pos.y); */
+					/* DEBUG("\tdist: %.2f prev dist: %.2f\n", dist, prev_dist); */
+					if (dist < prev_dist) {
+						found = 1;
+					}
 				}
 			}
 		}	
@@ -990,6 +1026,7 @@ static int cyberiada_test_condition(unsigned int time,
 				if (primary->type == cond->primary_obj_type &&
 					(primary->type == otPlayer ||
 					 (primary->type != otPlayer && strcmp(primary->class, cond->primary_obj_class) == 0)) &&
+					secondary->type ==cond->secondary_obj_type &&
 					(secondary->type == otPlayer ||
 					 (secondary->type != otPlayer && strcmp(secondary->class, cond->secondary_obj_class) == 0)) &&
 					DIST(primary->pos, secondary->pos) > DIST(primary->prev_pos, secondary->prev_pos)) {
@@ -1004,6 +1041,7 @@ static int cyberiada_test_condition(unsigned int time,
 		if (primary->type == cond->primary_obj_type &&
 			(primary->type == otPlayer ||
 			 (primary->type != otPlayer && strcmp(primary->class, cond->primary_obj_class) == 0)) &&
+			secondary->type == cond->secondary_obj_type &&
 			(secondary->type == otPlayer ||
 			 (secondary->type != otPlayer && strcmp(secondary->class, cond->secondary_obj_class) == 0)) &&
 			cond->argument >= argument) {
@@ -1036,7 +1074,7 @@ static int cyberiada_test_condition(unsigned int time,
 		DEBUG("Condition found on time %u: ", time);
 		cyberiada_ursula_log_print_condition(cond, "");
 		if (cond->second_cond) {
-			return cyberiada_test_condition(time, cond->second_cond, objects, objects_count, NULL, 0, NULL, 0, 0);
+			return cyberiada_test_condition(time, cond->second_cond, objects, objects_count, NULL, primary_index, NULL, 0, 0);
 		}
 		return 1;
 	}
@@ -1373,6 +1411,8 @@ int cyberiada_ursula_log_checker_check_log(UrsulaLogCheckerData* checker,
 				while(*s) {
 					Object* pos_object = NULL;
 					char *d, *d2;
+					char player_pos = 0;
+					
 					while(*s && (*s == ' '  || *s == '\t')) s++;
 					d = strchr(s, POSITION_LOG_DELIMITER);
 					if (!d) {
@@ -1383,12 +1423,13 @@ int cyberiada_ursula_log_checker_check_log(UrsulaLogCheckerData* checker,
 
 					d2 = strchr(s, ATTACK_LOG_DELIMITER);
 					if (!d2) {
-						ERROR("Bad position string on time %u in the log file %s.\n", time, log_file);
+						ERROR("Bad position string '%s' on time %u in the log file %s.\n", s, time, log_file);
 						goto error_log;
 					}
 					*d2 = 0;
 
 					if (strstr(s, LOG_PLAYER) == s) {
+						player_pos = 1;
 						for (i = 0; i < objects_count; i++) {
 							if (objects[i].type == otPlayer) {
 								pos_object = objects + i; 
@@ -1408,16 +1449,20 @@ int cyberiada_ursula_log_checker_check_log(UrsulaLogCheckerData* checker,
 						goto error_log;
 					}
 					s = d2 + 1;
-					while (*s && *s != '(') s++;
-					d2 = s + strlen(s) - 1;
-					while (d2 > s && (*d2 == ' ' || *d2 == '\t' || *d2 == ')')) {
-						*d2 = 0;
-						d2--;
-					}
 
 					pos_object->prev_pos.x = pos_object->pos.x;
 					pos_object->prev_pos.y = pos_object->pos.y;
-										
+
+					if (!player_pos) {
+						/* skip "position:" */
+						d2 = strchr(s, ATTACK_LOG_DELIMITER);
+						if (!d2) {
+							ERROR("Bad position string '%s' on time %u in the log file %s.\n", s, time, log_file);
+							goto error_log;
+						}
+						s = d2 + 1;
+					}
+						
 					if (parse_coordinates(s, &(pos_object->pos)) != URSULA_CHECK_NO_ERROR) {
 						ERROR("Bad coordinates %s in position string on time %u in the log file %s.\n", s, time, log_file);
 						goto error_log;
