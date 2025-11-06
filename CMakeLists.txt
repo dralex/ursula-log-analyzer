@@ -21,7 +21,7 @@ if(CMAKE_BUILD_TYPE STREQUAL Debug)
 endif()
 
 add_library(ursulalogcheck SHARED
-			   	ursulalogcheck.c
+			ursulalogcheck.c
 			sha256.c
 )
 
@@ -29,6 +29,15 @@ target_include_directories(ursulalogcheck PUBLIC
                                        	  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 			               	  $<INSTALL_INTERFACE:include/cyberiada>)
 target_link_libraries(ursulalogcheck PUBLIC m)
+
+add_library(ursulalogcheck_log SHARED
+			ursulalogcheck.c
+			sha256.c
+)
+target_compile_definitions(ursulalogcheck_log PUBLIC -DFULL_LOGS)
+target_include_directories(ursulalogcheck_log PUBLIC
+                                       	  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+target_link_libraries(ursulalogcheck_log PUBLIC m)
 
 add_subdirectory(tester)
 
