@@ -608,7 +608,6 @@ static int cyberiada_ursula_log_task_config(const char* cfgfile, UrsulaCheckerTa
 							goto error_csv;
 						}
 						task->object_reqs[object_reqs_cnt].limit = (unsigned char)n;
-						task->object_reqs[object_reqs_cnt].found = 0;
 					} else if (kind == 'b') {
 						float n;
 						n = atof(s);
@@ -1360,6 +1359,13 @@ int cyberiada_ursula_log_checker_check_log(UrsulaLogCheckerData* checker,
 			*result = URSULA_CHECK_RESULT_ERROR;
 		}
 		return URSULA_CHECK_BAD_PARAMETERS;		
+	}
+	
+	for (i = 0; i < task->base_objects_count; i++) {
+		task->base_objects[i].valid = 0;
+	}
+	for (i = 0; i < task->object_reqs_count; i++) {
+		task->object_reqs[i].found = 0;
 	}
 
 	DEBUG("Checking task:\n");
