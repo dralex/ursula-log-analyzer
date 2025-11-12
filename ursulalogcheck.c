@@ -608,6 +608,7 @@ static int cyberiada_ursula_log_task_config(const char* cfgfile, UrsulaCheckerTa
 							goto error_csv;
 						}
 						task->object_reqs[object_reqs_cnt].limit = (unsigned char)n;
+						task->object_reqs[object_reqs_cnt].found = 0;
 					} else if (kind == 'b') {
 						float n;
 						n = atof(s);
