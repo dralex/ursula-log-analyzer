@@ -990,20 +990,22 @@ static int cyberiada_test_condition(unsigned int time,
 									Object* primary,
 									size_t* primary_index,
 									Object* secondary,
+									size_t* secondary_index,
 									float argument,
 									char won)
 {
 	char found = 0;
 	size_t i, j;
-	char objects_found[MAX_OBJECTS];
+	size_t objects_found[MAX_OBJECTS];
 	char multiple_objects;
 	
-	if (!cond || !objects || !primary_index || objects_count > MAX_OBJECTS) {
+	if (!cond || !objects || !primary_index || !secondary_index || objects_count > MAX_OBJECTS) {
 		return 0;
 	}
 
 #ifdef FULL_LOGS
-	DEBUG("Checking condition on time %u: ", time);
+	DEBUG("Checking condition on time %u [pri %lu sec %lu]: ",
+		  time, *primary_index, *secondary_index);
 	cyberiada_ursula_log_print_condition(cond, "\t");
 #endif
 
@@ -1013,7 +1015,9 @@ static int cyberiada_test_condition(unsigned int time,
 		cond->type == condObjectRetiring) {
 
 		multiple_objects = 1;
-		memset(objects_found, 0, sizeof(char) * objects_count);
+		for (i = 0; i < objects_count; i++) {
+			objects_found[i] = objects_count;
+		}
 	} else {
 		multiple_objects = 0;
 	}
@@ -1021,7 +1025,9 @@ static int cyberiada_test_condition(unsigned int time,
 	if (cond->type == condObjectMoving) {
 		for (i = 0; i < objects_count; i++) {
 			primary = objects + i;
-			*primary_index = i;
+			if (*primary_index < objects_count && *primary_index != i) {
+				continue;
+			}
 			if (primary->type == cond->primary_obj_type &&
 				(primary->type == otPlayer ||
 				 (primary->type != otPlayer && strcmp(primary->class, cond->primary_obj_class) == 0))) {
@@ -1031,18 +1037,23 @@ static int cyberiada_test_condition(unsigned int time,
 					  time,
 					  primary->type == otPlayer ? "PL" : primary->id, dist);
 #endif
-			if (dist > 0) {
-					objects_found[i] = 1;
+				if (dist > 0) {
+					objects_found[i] = i;
 				}
 			}
 		}
 	} else if (cond->type == condObjectProximity) {
 		for (i = 0; i < objects_count; i++) {
 			primary = objects + i;
-			*primary_index = i;
+			if (*primary_index < objects_count && *primary_index != i) {
+				continue;
+			}
 			for (j = 0; j < objects_count; j++) {
 				if (i == j) continue;
 				secondary = objects + j;
+				if (*secondary_index < objects_count && *secondary_index != j) {
+					continue;
+				}
 				if (primary->type == cond->primary_obj_type &&
 					(primary->type == otPlayer ||
 					 (primary->type != otPlayer && strcmp(primary->class, cond->primary_obj_class) == 0)) &&
@@ -1062,7 +1073,7 @@ static int cyberiada_test_condition(unsigned int time,
 					DEBUG("\tdist: %.2f arg: %.2f\n", dist, cond->argument);
 #endif
 					if (dist <= cond->argument) {
-						objects_found[i] = 1;
+						objects_found[i] = j;
 						break;
 					}
 				}
@@ -1071,10 +1082,15 @@ static int cyberiada_test_condition(unsigned int time,
 	} else if (cond->type == condObjectApproaching) {
 		for (i = 0; i < objects_count; i++) {
 			primary = objects + i;
-			*primary_index = i;
+			if (*primary_index < objects_count && *primary_index != i) {
+				continue;
+			}
 			for (j = 0; j < objects_count; j++) {
 				if (i == j) continue;
 				secondary = objects + j;
+				if (*secondary_index < objects_count && *secondary_index != j) {
+					continue;
+				}
 				if (primary->type == cond->primary_obj_type &&
 					(primary->type == otPlayer ||
 					 (primary->type != otPlayer && strcmp(primary->class, cond->primary_obj_class) == 0)) &&
@@ -1085,7 +1101,9 @@ static int cyberiada_test_condition(unsigned int time,
 					float dist = DIST(primary->pos, secondary->pos);
 					float prev_dist = DIST(primary->prev_pos, secondary->prev_pos);
 #ifdef FULL_LOGS
-					DEBUG("Check condition approaching:\n");
+					DEBUG("Check condition approaching %s and %s:\n",
+						  primary->type == otPlayer ? "PL" : primary->id,
+						  secondary->type == otPlayer ? "PL" : secondary->id);
 					cyberiada_ursula_log_print_condition(cond, "\t");
 					DEBUG("\tprimary: (%.2f, %.2f) prev (%.2f, %.2f)\n",
 						  primary->pos.x, primary->pos.y, primary->prev_pos.x, primary->prev_pos.y);
@@ -1094,7 +1112,7 @@ static int cyberiada_test_condition(unsigned int time,
 					DEBUG("\tdist: %.2f prev dist: %.2f\n", dist, prev_dist);
 #endif
 					if (moving && dist < prev_dist) {
-						objects_found[i] = 1;
+						objects_found[i] = j;
 						break;
 					}
 				}
@@ -1103,10 +1121,15 @@ static int cyberiada_test_condition(unsigned int time,
 	} else if (cond->type == condObjectRetiring) {
 		for (i = 0; i < objects_count; i++) {
 			primary = objects + i;
-			*primary_index = i;
+			if (*primary_index < objects_count && *primary_index != i) {
+				continue;
+			}
 			for (j = 0; j < objects_count; j++) {
 				if (i == j) continue;
 				secondary = objects + j;
+				if (*secondary_index < objects_count && *secondary_index != j) {
+					continue;
+				}
 				if (primary->type == cond->primary_obj_type &&
 					(primary->type == otPlayer ||
 					 (primary->type != otPlayer && strcmp(primary->class, cond->primary_obj_class) == 0)) &&
@@ -1117,7 +1140,9 @@ static int cyberiada_test_condition(unsigned int time,
 					float dist = DIST(primary->pos, secondary->pos);
 					float prev_dist = DIST(primary->prev_pos, secondary->prev_pos);
 #ifdef FULL_LOGS
-					DEBUG("Check condition retiring:\n");
+					DEBUG("Check condition retiring %s and %s:\n",
+						  primary->type == otPlayer ? "PL" : primary->id,
+						  secondary->type == otPlayer ? "PL" : secondary->id);
 					cyberiada_ursula_log_print_condition(cond, "\t");
 					DEBUG("\tprimary: (%.2f, %.2f) prev (%.2f, %.2f)\n",
 						  primary->pos.x, primary->pos.y, primary->prev_pos.x, primary->prev_pos.y);
@@ -1126,7 +1151,7 @@ static int cyberiada_test_condition(unsigned int time,
 					DEBUG("\tdist: %.2f prev dist: %.2f moving: %.2f\n", dist, prev_dist, moving);
 #endif
 					if (moving && dist > prev_dist) {
-						objects_found[i] = 1;
+						objects_found[i] = j;
 						break;
 					}
 				}
@@ -1183,13 +1208,20 @@ static int cyberiada_test_condition(unsigned int time,
 	if (multiple_objects) {
 		found = 0;
 		for (i = 0; i < objects_count; i++) {
-			if (objects_found[i]) {
+			if (objects_found[i] < objects_count) {
+				if (*primary_index == objects_count) {
+					*primary_index = i;
+				}
+				if (*secondary_index == objects_count && cond->type != condObjectMoving) {
+					*secondary_index = objects_found[i];
+				}
+				
 				found = 1;
-				*primary_index = i;
 #ifdef FULL_LOGS
-				DEBUG("Condition found on time %u for object %s: ",
+				DEBUG("Condition found on time %u for objects %s and %s: ",
 					  time,
-					  objects[*primary_index].type != otPlayer ? objects[*primary_index].id : "PL");
+					  objects[*primary_index].type != otPlayer ? objects[*primary_index].id : "PL",
+					  objects[*secondary_index].type != otPlayer ? objects[*secondary_index].id : "PL");
 				cyberiada_ursula_log_print_condition(cond, "");
 #endif
 				if (cond->second_cond) {
@@ -1197,21 +1229,29 @@ static int cyberiada_test_condition(unsigned int time,
 					DEBUG("Checking second condition: ");
 					cyberiada_ursula_log_print_condition(cond->second_cond, "");
 #endif
-					found = cyberiada_test_condition(time, cond->second_cond, objects, objects_count, NULL, primary_index, NULL, 0, 0);
-				}
+					if (cond->primary_obj_type == cond->second_cond->primary_obj_type &&
+						strcmp(cond->primary_obj_class, cond->second_cond->primary_obj_class) == 0) {
+
+						found = cyberiada_test_condition(time, cond->second_cond, objects, objects_count,
+														 NULL, primary_index, NULL, secondary_index, 0, 0);
+					} else {
+						found = cyberiada_test_condition(time, cond->second_cond, objects, objects_count,
+														 NULL, secondary_index, NULL, primary_index, 0, 0);
+					}
+				} 
 			}
 		}
 		return found;
 	} else {
 		if (found) {
 #ifdef FULL_LOGS
-			if (!won) {
+			if (!won && *primary_index < objects_count) {
 				DEBUG("Condition found on time %u for object %s: ",
 					  time,
 					  objects[*primary_index].type != otPlayer ? objects[*primary_index].id : "PL");
 			} else {
 				DEBUG("Condition found on time %u: ", time);
-				}
+			}
 			cyberiada_ursula_log_print_condition(cond, "");
 #endif
 			if (cond->second_cond) {
@@ -1219,7 +1259,8 @@ static int cyberiada_test_condition(unsigned int time,
 				DEBUG("Checking second condition: ");
 				cyberiada_ursula_log_print_condition(cond->second_cond, "");
 #endif
-				return cyberiada_test_condition(time, cond->second_cond, objects, objects_count, NULL, primary_index, NULL, 0, 0);
+				return cyberiada_test_condition(time, cond->second_cond, objects, objects_count, NULL,
+												primary_index, NULL, secondary_index, 0, 0);
 			}
 			return 1;
 		}
@@ -1240,6 +1281,7 @@ static int cyberiada_test_the_condition(ConditionType type,
 										char won)
 {
 	size_t i, j;
+	size_t secondary_index = objects_count;
 
 #ifdef FULL_LOGS
 	DEBUG("Test the condition %s on time %u\n", CONDITION_TYPE_STR[type], time);
@@ -1249,7 +1291,7 @@ static int cyberiada_test_the_condition(ConditionType type,
 		Condition* cond = task->conditions + i;
 		if (cond->type != type) continue;
 		if (cyberiada_test_condition(time, cond, objects, objects_count,
-									 primary, &primary_index, secondary, argument, won)) {
+									 primary, &primary_index, secondary, &secondary_index, argument, won)) {
 			if (cond->type == condGameWon) {
 				size_t obj_index;
 				for (obj_index = 0; obj_index < objects_count; obj_index++) {
@@ -1267,6 +1309,12 @@ static int cyberiada_test_the_condition(ConditionType type,
 				}
 			} else {
 				char found = 0;
+				if (primary_index == objects_count) {
+#ifdef FULL_LOGS
+					DEBUG("Object primary index doesn't found!\n");
+#endif
+					return 0;
+				}				
 				for (j = i + 1; j < task->conditions_count; j++) {
 					if (cond_matrix[j][primary_index]) {
 						found = 1;
@@ -1670,7 +1718,7 @@ int cyberiada_ursula_log_checker_check_log(UrsulaLogCheckerData* checker,
 				if (!first_pos) {
 					first_pos = 1;
 				} else {
-					cyberiada_test_all_conditions(time, task, objects, objects_count, cond_matrix, NULL, 0, NULL, 0.0, 0);
+					cyberiada_test_all_conditions(time, task, objects, objects_count, cond_matrix, NULL, objects_count, NULL, 0.0, 0);
 				}
 			} else if (strstr(s, LOG_ATTACK) == s) {
 				size_t attacker_index = 0;
@@ -1835,7 +1883,7 @@ int cyberiada_ursula_log_checker_check_log(UrsulaLogCheckerData* checker,
 
 				cyberiada_test_the_condition(condGameWon,
 											 time, task, objects, objects_count, cond_matrix,
-											 NULL, 0, NULL, 0.0, 1);
+											 NULL, objects_count, NULL, 0.0, 1);
 				
 			} else if (strstr(s, LOG_SESSION_ENDED) == s) {
 				break;
